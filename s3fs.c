@@ -69,6 +69,8 @@ int fs_mknod(const char *path, mode_t mode, dev_t dev) {
 int fs_mkdir(const char *path, mode_t mode) {
     fprintf(stderr, "fs_mkdir(path=\"%s\", mode=0%3o)\n", path, mode);
     s3context_t *ctx = GET_PRIVATE_DATA;
+    mode |= S_IFDIR;
+
     return -EIO;
 }
 
