@@ -20,10 +20,24 @@
 
 #define GET_PRIVATE_DATA ((s3context_t *) fuse_get_context()->private_data)
 
+/*
+ * For each function below, if you need to return an error,
+ * read the appropriate man page for the call and see what
+ * error codes make sense for the type of failure you want
+ * to convey.  For example, many of the calls below return
+ * -EIO (an I/O error), since there are no S3 calls yet
+ * implemented.  (Note that you need to return the negative
+ * value for an error code.)
+ */
+
 
 /* 
- * Get file attributes 
+ * Get file attributes.  Similar to the stat() call
+ * (and uses the same structure).  The st_dev, st_blksize,
+ * and st_ino fields are ignored in the struct (and 
+ * do not need to be filled in).
  */
+
 int fs_getattr(const char *path, struct stat *statbuf) {
     fprintf(stderr, "fs_getattr(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
@@ -33,7 +47,10 @@ int fs_getattr(const char *path, struct stat *statbuf) {
 
 /* 
  * Create a file "node".  When a new file is created, this
-  * function will get called.  
+ * function will get called.  
+ * This is called for creation of all non-directory, non-symlink
+ * nodes.  You *only* need to handle creation of regular
+ * files here.  (See the man page for mknod (2).)
  */
 int fs_mknod(const char *path, mode_t mode, dev_t dev) {
     fprintf(stderr, "fs_mknod(path=\"%s\", mode=0%3o)\n", path, mode);
@@ -42,7 +59,12 @@ int fs_mknod(const char *path, mode_t mode, dev_t dev) {
 }
 
 /* 
- * Create a directory 
+ * Create a new directory.
+ *
+ * Note that the mode argument may not have the type specification
+ * bits set, i.e. S_ISDIR(mode) can be false.  To obtain the
+ * correct directory type bits (for setting in the metadata)
+ * use mode|S_IFDIR.
  */
 int fs_mkdir(const char *path, mode_t mode) {
     fprintf(stderr, "fs_mkdir(path=\"%s\", mode=0%3o)\n", path, mode);
@@ -51,7 +73,7 @@ int fs_mkdir(const char *path, mode_t mode) {
 }
 
 /*
- * Remove a file 
+ * Remove a file.
  */
 int fs_unlink(const char *path) {
     fprintf(stderr, "fs_unlink(path=\"%s\")\n", path);
@@ -60,7 +82,7 @@ int fs_unlink(const char *path) {
 }
 
 /*
- * Remove a directory 
+ * Remove a directory. 
  */
 int fs_rmdir(const char *path) {
     fprintf(stderr, "fs_rmdir(path=\"%s\")\n", path);
@@ -69,7 +91,7 @@ int fs_rmdir(const char *path) {
 }
 
 /*
- * Rename a file 
+ * Rename a file.
  */
 int fs_rename(const char *path, const char *newpath) {
     fprintf(stderr, "fs_rename(fpath=\"%s\", newpath=\"%s\")\n", path, newpath);
@@ -78,7 +100,7 @@ int fs_rename(const char *path, const char *newpath) {
 }
 
 /*
- * Change the permission bits of a file 
+ * Change the permission bits of a file.
  */
 int fs_chmod(const char *path, mode_t mode) {
     fprintf(stderr, "fs_chmod(fpath=\"%s\", mode=0%03o)\n", path, mode);
@@ -87,7 +109,7 @@ int fs_chmod(const char *path, mode_t mode) {
 }
 
 /*
- * Change the owner and group of a file 
+ * Change the owner and group of a file.
  */
 int fs_chown(const char *path, uid_t uid, gid_t gid) {
     fprintf(stderr, "fs_chown(path=\"%s\", uid=%d, gid=%d)\n", path, uid, gid);
@@ -96,7 +118,7 @@ int fs_chown(const char *path, uid_t uid, gid_t gid) {
 }
 
 /*
- * Change the size of a file 
+ * Change the size of a file.
  */
 int fs_truncate(const char *path, off_t newsize) {
     fprintf(stderr, "fs_truncate(path=\"%s\", newsize=%lld)\n", path, newsize);
@@ -105,7 +127,7 @@ int fs_truncate(const char *path, off_t newsize) {
 }
 
 /*
- * Change the access and/or modification times of a file 
+ * Change the access and/or modification times of a file. 
  */
 int fs_utime(const char *path, struct utimbuf *ubuf) {
     fprintf(stderr, "fs_utime(path=\"%s\")\n", path);
@@ -123,6 +145,8 @@ int fs_utime(const char *path, struct utimbuf *ubuf) {
  * Optionally open may also return an arbitrary filehandle in the 
  * fuse_file_info structure (fi->fh).
  * which will be passed to all file operations.
+ * (In stages 1 and 2, you are advised to keep this function very,
+ * very simple.)
  */
 int fs_open(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_open(path\"%s\")\n", path);
@@ -179,7 +203,7 @@ int fs_flush(const char *path, struct fuse_file_info *fi) {
  *
  * Release is called when there are no more references to an open
  * file: all file descriptors are closed and all memory mappings
- * are unmapped.
+ * are unmapped.  
  *
  * For every open() call there will be exactly one release() call
  * with the same flags and file descriptor.  It is possible to
@@ -215,7 +239,8 @@ int fs_opendir(const char *path, struct fuse_file_info *fi) {
 }
 
 /*
- * Read directory
+ * Read directory.  See the project description for how to use the filler
+ * function for filling in directory items.
  */
 int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
 	       struct fuse_file_info *fi)
@@ -227,7 +252,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 }
 
 /*
- * Release directory
+ * Release directory.
  */
 int fs_releasedir(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_releasedir(path=\"%s\")\n", path);
@@ -246,7 +271,8 @@ int fs_fsyncdir(const char *path, int datasync, struct fuse_file_info *fi) {
 }
 
 /*
- * initialize the file system
+ * Initialize the file system.  This is called once upon
+ * file system startup.
  */
 void *fs_init(struct fuse_conn_info *conn)
 {
@@ -257,7 +283,7 @@ void *fs_init(struct fuse_conn_info *conn)
 
 /*
  * Clean up filesystem -- free any allocated data.
- * Called on filesystem exit.
+ * Called once on filesystem exit.
  */
 void fs_destroy(void *userdata) {
     fprintf(stderr, "fs_destroy --- shutting down file system.\n");
@@ -265,7 +291,8 @@ void fs_destroy(void *userdata) {
 }
 
 /*
- * Check file access permissions
+ * Check file access permissions.  For now, just return 0 (success!)
+ * Later, actually check permissions (don't bother initially).
  */
 int fs_access(const char *path, int mask) {
     fprintf(stderr, "fs_access(path=\"%s\", mask=0%o)\n", path, mask);
@@ -274,7 +301,9 @@ int fs_access(const char *path, int mask) {
 }
 
 /*
- * Change the size of an open file
+ * Change the size of an open file.  Very similar to fs_truncate (and,
+ * depending on your implementation), you could possibly treat it the
+ * same as fs_truncate.
  */
 int fs_ftruncate(const char *path, off_t offset, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_ftruncate(path=\"%s\", offset=%lld)\n", path, offset);
