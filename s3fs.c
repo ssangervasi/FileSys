@@ -121,7 +121,7 @@ int fs_chown(const char *path, uid_t uid, gid_t gid) {
  * Change the size of a file.
  */
 int fs_truncate(const char *path, off_t newsize) {
-    fprintf(stderr, "fs_truncate(path=\"%s\", newsize=%lld)\n", path, newsize);
+    fprintf(stderr, "fs_truncate(path=\"%s\", newsize=%d)\n", path, (int)newsize);
     s3context_t *ctx = GET_PRIVATE_DATA;
     return -EIO;
 }
@@ -163,8 +163,8 @@ int fs_open(const char *path, struct fuse_file_info *fi) {
  * substituted with zeroes.  
  */
 int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    fprintf(stderr, "fs_read(path=\"%s\", buf=%p, size=%d, offset=%lld)\n",
-	        path, buf, size, offset);
+    fprintf(stderr, "fs_read(path=\"%s\", buf=%p, size=%d, offset=%d)\n",
+	        path, buf, (int)size, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
     return -EIO;
 }
@@ -176,8 +176,8 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
  * except on error.
  */
 int fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
-    fprintf(stderr, "fs_write(path=\"%s\", buf=%p, size=%d, offset=%lld)\n",
-	        path, buf, size, offset);
+    fprintf(stderr, "fs_write(path=\"%s\", buf=%p, size=%d, offset=%d)\n",
+	        path, buf, (int)size, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
     return -EIO;
 }
@@ -245,8 +245,8 @@ int fs_opendir(const char *path, struct fuse_file_info *fi) {
 int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
 	       struct fuse_file_info *fi)
 {
-    fprintf(stderr, "fs_readdir(path=\"%s\", buf=%p, offset=%lld)\n",
-	        path, buf, offset);
+    fprintf(stderr, "fs_readdir(path=\"%s\", buf=%p, offset=%d)\n",
+	        path, buf, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
     return -EIO;
 }
@@ -306,7 +306,7 @@ int fs_access(const char *path, int mask) {
  * same as fs_truncate.
  */
 int fs_ftruncate(const char *path, off_t offset, struct fuse_file_info *fi) {
-    fprintf(stderr, "fs_ftruncate(path=\"%s\", offset=%lld)\n", path, offset);
+    fprintf(stderr, "fs_ftruncate(path=\"%s\", offset=%d)\n", path, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
     return -EIO;
 }
