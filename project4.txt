@@ -294,7 +294,7 @@ Each of the 3 stages below includes the portion of credit you can earn (at
 maximum) for reaching that stage.  The skeleton file ``s3fs`` has some more
 information about each callback function to implement.
 
-Stage 1 (worth 73 out of 100 points)
+Stage 1 (worth 72 out of 100 points)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For the initial stage of this project, you will need to handle file system
@@ -341,7 +341,7 @@ advice, I know.)  Don't try to be efficient.  Just go for correctness.
 ``fs_rmdir``
     Remove an existing directory.  Only remove the directory if there are no entries other than ``"."`` (i.e., the directory is empty).  Remember to remove the directory entry in the parent directory object.
 
-Stage 2 (worth 20 out of 100 points)
+Stage 2 (worth 18 out of 100 points)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For this stage, similar advice as in the first stage.  Go for correctness and
@@ -382,7 +382,7 @@ ignore efficiency.
     At this stage of the project, you should fix this callback so that it properly checks permissions.
 
 
-Stage 3 (worth 7 out of 100 points)
+Stage 3 (worth 10 out of 100 points)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Besides implementing the following callback functions, you'll need to do some
