@@ -35,17 +35,16 @@ typedef struct {
 
 //THE STRUCT THAT WE NEED.
 
+
 typedef struct{
 	unsigned char type; //'f' or 'd' or unused?
 	char name[256];
-	//If a directory, entries will have... entries.
-	s3dirent_t** entries;
 	//metadata
 	int size; // number of bytes
 	//going to need time stamps and stuff
 	
 } s3dirent_t;
 
-
+s3dirent_t* entry_init(const char* name, const char type);
 
 #endif // __USERSPACEFS_H__
