@@ -280,6 +280,8 @@ void *fs_init(struct fuse_conn_info *conn)
 {
     fprintf(stderr, "fs_init --- initializing file system.\n");
     s3context_t *ctx = GET_PRIVATE_DATA;
+	if(0==s3fs_clear_bucket());
+	
     return ctx;
 }
 

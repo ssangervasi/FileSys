@@ -32,31 +32,17 @@ typedef struct {
  * Other data type definitions (e.g., a directory entry
  * type) should go here.
  */
-//A LINKED LIST OOH YEAH YOU LIKE THAT?!
-struct node {
-    struct node *next;
-	s3dirent_t entry;
-};
- 
-typedef struct {
-	struct node* head;
-	struct node* tail;
-} linkedlist;
-  
-void list_insert(struct node **tail);
-void list_remove(struct node **head, struct node **tail);
-void list_clear(struct node *list);
 
 //THE STRUCT THAT WE NEED.
 
 typedef struct{
 	unsigned char type; //'f' or 'd' or unused?
 	char name[256];
-	//linked list for directory entries. Should be initialized with "." referring to itself:
-	linkedlist entries; 
+	//If a directory, entries will have... entries.
+	s3dirent_t** entries;
 	//metadata
 	int size; // number of bytes
-	
+	//going to need time stamps and stuff
 	
 } s3dirent_t;
 
