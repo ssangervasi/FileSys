@@ -280,15 +280,15 @@ void *fs_init(struct fuse_conn_info *conn)
 {
     fprintf(stderr, "fs_init --- initializing file system.\n");
     s3context_t *ctx = GET_PRIVATE_DATA;
-	if(0!=s3fs_clear_bucket((const char)(*ctx)->s3bucket)){
-		return -EIO;
+	if(0!=s3fs_clear_bucket((const char*) &(ctx->s3bucket))){
+		return NULL;
 	}
 	s3dirent_t* root = dir_init();
 
-	if(sizeof(s3dirent_t) == s3fs_put_object((const char*)(*ctx)->s3bucket, (const char*)"/", (const uint8_t*)root, sizeof(s3dirent_t)){
+	if(sizeof(s3dirent_t) == s3fs_put_object((const char*)&(ctx)->s3bucket, (const char*)"/", (const uint8_t*)root, sizeof(s3dirent_t))){
 		fprintf(stderr, "fs_init --- file sysetem initalized.\n");
 	}else{
-		return -EIO;
+		return NULL;
 	}
     return ctx;
 }
@@ -297,21 +297,40 @@ void *fs_init(struct fuse_conn_info *conn)
 //Note: we'll want this to do initial time stamp eventually
 s3dirent_t* dir_init(){
 	s3dirent_t* newentry = malloc(sizeof(s3dirent_t));
-	strcpy((*newentry)->name,(const char*)".");
-	(*newentry)->type = 'd';  
+	strcpy(newentry->name,(const char*)".");
+	newentry->type = 'd';  
 	//Initial timestamp for "."
 	return newentry;
 }
 
 s3dirent_t* file_init(const char* name, const char type){
 	s3dirent_t* newentry = malloc(sizeof(s3dirent_t));
-	char* realname = name;
+	char* realname = (char*)name;
 	if(name == NULL){
 		realname = "new";
 	}
-	strcpy((*newentry)->name,(const char*) realname);
-	(*newentry)->type = 'f';
+	strcpy(newentry->name,(const char*) realname);
+	newentry->type = 'f';
 	return newentry;
+}
+
+//Helper function just for gettin the current time:
+char* timestamp(){
+	time_t start;
+	struct tm actual;
+	char hold[80];
+	time(&start);
+	actual = *localtime(&start);
+	strftime(hold, sizeof(hold), "%a %Y-%m-%d %H:%M:%S %Z", &actual);
+	return hold;
+}
+
+struct tm* tmStamp(){
+	time_t start;
+	struct tm actual;
+	time(&start);
+	actual = *localtime(&start);
+	return &actual;
 }
 /*
  * Clean up filesystem -- free any allocated data.

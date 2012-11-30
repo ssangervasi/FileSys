@@ -42,9 +42,12 @@ typedef struct{
 	//metadata
 	int size; // number of bytes
 	//going to need time stamps and stuff
+	struct tm createTime;
 	
 } s3dirent_t;
 
 s3dirent_t* entry_init(const char* name, const char type);
+s3dirent_t* dir_init();
+s3dirent_t* file_init(const char* name, const char type);
 
 #endif // __USERSPACEFS_H__
