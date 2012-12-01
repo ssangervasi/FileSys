@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-
+#include <sys/types.h> //?
 
 
 /* This code is based on the fine code written by Joseph Pfeiffer for his
@@ -23,6 +23,7 @@
 
 #define BUFFERSIZE 1024
 
+#define BUCK (const char*)&(ctx)->s3bucket
 // store filesystem state information in this struct
 typedef struct {
     char s3bucket[BUFFERSIZE];
@@ -42,11 +43,15 @@ typedef struct{
 	//metadata
 	int size; // number of bytes
 	//going to need time stamps and stuff
+	struct tm createTime;
+	mode_t mode;
+	
 	
 } s3dirent_t;
 
 s3dirent_t* entry_init(const char* name, const char type);
 s3dirent_t* dir_init();
 s3dirent_t* file_init(const char* name, const char type);
+struct tm* tmStamp();
 
 #endif // __USERSPACEFS_H__

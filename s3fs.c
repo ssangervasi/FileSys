@@ -237,20 +237,43 @@ int fs_fsync(const char *path, int datasync, struct fuse_file_info *fi) {
 int fs_opendir(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_opendir(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+	
+	uint8_t **testByte; 
+	/*	We don't care about getting the whole thing, we just want to know it's there
+	  	so we ask it to give us back at most 1 byte from the object.
+		Note that we now have BUCK representing a handy macro in s3fs.h
+	*/
+	int result = (int) ssize_t s3fs_get_object(BUCK, path, testByte, 0, 1);
+	free(testByte); //Don't need it
+	if(result == -1){
+		return -EIO;
+	}
+	//At this point result will be 0 if it was an empty object, or 1 if it had at least one byte.
+	return result;
 }
 
 /*
  * Read directory.  See the project description for how to use the filler
  * function for filling in directory items.
  */
-int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
-	       struct fuse_file_info *fi)
+int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
 {
     fprintf(stderr, "fs_readdir(path=\"%s\", buf=%p, offset=%d)\n",
 	        path, buf, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+	uint8_t **dirbuf;
+	ssize_t read = ssize_t s3fs_get_object(BUCK, path, dirbuf, 0, 0);
+	if (read == -1){
+	    return -EIO;
+	}
+	int nument = (int)read / sizeof(s3dirent_t);
+	s3dirent_t** dirarray = (s3dirent_t**) dirbuf;
+	int i = 0;
+	for(; i < nument; i++){
+		if( filler(buf, dirarray[i].name, NULL, 0) != 0) {
+			return -ENOMEM;
+		}
+	}
 }
 
 /*
@@ -259,6 +282,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 int fs_releasedir(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_releasedir(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
+	
     return -EIO;
 }
 
@@ -298,8 +322,10 @@ void *fs_init(struct fuse_conn_info *conn)
 s3dirent_t* dir_init(){
 	s3dirent_t* newentry = malloc(sizeof(s3dirent_t));
 	strcpy(newentry->name,(const char*)".");
-	newentry->type = 'd';  
+	newentry->type = 'd';
+	newentry-> mode = (S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
 	//Initial timestamp for "."
+	newentry->createTime = *tmStamp();
 	return newentry;
 }
 
@@ -311,10 +337,20 @@ s3dirent_t* file_init(const char* name, const char type){
 	}
 	strcpy(newentry->name,(const char*) realname);
 	newentry->type = 'f';
+	newentry->createTime = *tmStamp();
 	return newentry;
 }
-
+//Actual helper function for getting a time thing
+struct tm* tmStamp(){
+	time_t start;
+	struct tm actual;
+	time(&start);
+	actual = *localtime(&start);
+	return &actual;
+}
 //Helper function just for gettin the current time:
+//This is a char* so we don't use it...
+/*
 char* timestamp(){
 	time_t start;
 	struct tm actual;
@@ -324,14 +360,8 @@ char* timestamp(){
 	strftime(hold, sizeof(hold), "%a %Y-%m-%d %H:%M:%S %Z", &actual);
 	return hold;
 }
+*/
 
-struct tm* tmStamp(){
-	time_t start;
-	struct tm actual;
-	time(&start);
-	actual = *localtime(&start);
-	return &actual;
-}
 /*
  * Clean up filesystem -- free any allocated data.
  * Called once on filesystem exit.
