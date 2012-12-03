@@ -29,7 +29,7 @@
  * implemented.  (Note that you need to return the negative
  * value for an error code.)
  */
-
+int fs_opendir(const char *path, struct fuse_file_info *fi);
 
 /* 
  * Get file attributes.  Similar to the stat() call
@@ -41,7 +41,23 @@
 int fs_getattr(const char *path, struct stat *statbuf) {
     fprintf(stderr, "fs_getattr(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+	if(stat == NULL){ stat = malloc(sizeof(struct stat);}
+	
+	uint8_t** dirbuf = NULL;
+	ssize_t read = s3fs_get_object(BUCK, (const char*)dirname((char*)path), dirbuf, 0, sizeof(s3dirent_t));
+	if (read < 0 || dirbuf == NULL){
+	    return -ENOENT;
+	}
+	int nument = (int)read / sizeof(s3dirent_t);
+	s3dirent_t* dirarray = (s3dirent_t*)(*dirbuf);
+	//loop to look for basename()
+	stat->st_mode = dirarray[0]->mode;
+	stat->st_size = (off_t)dirarray[0]->size;
+	stat->st_ctime = mktime(&(dirarray[0]->createTime));
+	stat->st_mtime = mktime(&(dirarray[0]->modTime));
+	free(dirarray);
+	free(dirbuf);
+	return 0;
 }
 
 
@@ -70,8 +86,35 @@ int fs_mkdir(const char *path, mode_t mode) {
     fprintf(stderr, "fs_mkdir(path=\"%s\", mode=0%3o)\n", path, mode);
     s3context_t *ctx = GET_PRIVATE_DATA;
     mode |= S_IFDIR;
+	
+	uint8_t** dirbuf = NULL;
+	ssize_t read = s3fs_get_object(BUCK, (const char*)dirname((char*)path), dirbuf, 0, 0);
+	if (read < 0 || dirbuf == NULL){
+	    return -ENOENT;
+	}
+	int nument = (int)read / sizeof(s3dirent_t);
+	s3dirent_t* dirarray = (s3dirent_t*)(*dirbuf);
+	s3dirent_t* newdirarray = malloc(read + sizeof(s3dirent_t));
+	
+	s3dirent_t* newdir = dir_init((char*)basename((char*)path));
 
-    return -EIO;
+	memcpy((void*)newdirarray, (const void*)dirarray, read);
+	memcpy((void*)(newdirarray+nument), (const void*)newdir, sizeof(s3dirent_t));
+	newdirarray[0].size += sizeof(s3dirent_t);	
+	if(read + sizeof(s3dirent_t) == s3fs_put_object(BUCK, (const char*)dirname((char*)path), (const uint8_t*)newdirarray,read + sizeof(s3dirent_t))){
+		fprintf(stderr, "new dir put in parent.\n");
+	}	
+	free(dirarray);
+	free(newdirarray);
+	free(newdir);
+	free(dirbuf);
+	newdir = dir_init(NULL);
+	newdir -> mode = mode;
+	if(sizeof(s3dirent_t) == s3fs_put_object(BUCK,path, (const uint8_t*)newdirarray,sizeof(s3dirent_t))){
+		fprintf(stderr, "new dir put in parent.\n");
+	}
+	free(newdir);
+    return 0;
 }
 
 /*
@@ -88,8 +131,44 @@ int fs_unlink(const char *path) {
  */
 int fs_rmdir(const char *path) {
     fprintf(stderr, "fs_rmdir(path=\"%s\")\n", path);
-    s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+	s3context_t *ctx = GET_PRIVATE_DATA;
+
+	uint8_t **dirbuf = NULL;
+	ssize_t read = s3fs_get_object(BUCK, path, dirbuf, 0, 0);
+	if (read == -1){
+	    return -EIO;
+	}
+
+	if( read > sizeof(s3dirent_t){	
+		return -1;
+	}
+	s3fs_remove_object(BUCK, path);
+	free(dirbuf);
+	read = s3fs_get_object(BUCK, (const char*)dirname((char*) path), dirbuf, 0,0);
+	if (read == -1){
+	    return -EIO;
+	}
+
+	s3dirent_t* dirarray = (s3dirent_t*) *dirbuf;
+	s3dirent_t* newarray = malloc(sizeof(read) - sizeof(s3dirent_t));
+	
+	int i = 0;
+	int j = 0;
+	for(; i <= read/sizeof(s3dirent_t) ; i++){
+		if(strcmp((const char*)dirarray[i]->name, (const char*) basename((char*) path)) != 0){
+			memcpy((void*) (newarray+j), (const void*) (dirarray + i), sizeof(s3dirent_t));
+			j++;
+		}
+	}
+	newarray[0].size -= sizeof(s3dirent_t);
+	if(read-sizeof(s3dirent_t) == s3fs_put_object(BUCK,(const char*)dirname((char*) path), (const uint8_t*)newarray,read-sizeof(s3dirent_t))){
+		fprintf(stderr, "parent dir updated.\n");
+	}	
+	
+	free(dirarray);
+	free(newarray);
+	free(dirbuf);
+    return 0;
 }
 
 /*
@@ -225,7 +304,7 @@ int fs_release(const char *path, struct fuse_file_info *fi) {
  */
 int fs_fsync(const char *path, int datasync, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_fsync(path=\"%s\")\n", path);
-
+	return 0;
 }
 
 /*
@@ -238,12 +317,13 @@ int fs_opendir(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_opendir(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
 	
-	uint8_t **testByte; 
+	uint8_t **testByte = NULL; 
 	/*	We don't care about getting the whole thing, we just want to know it's there
 	  	so we ask it to give us back at most 1 byte from the object.
 		Note that we now have BUCK representing a handy macro in s3fs.h
 	*/
-	int result = (int) ssize_t s3fs_get_object(BUCK, path, testByte, 0, 1);
+	int result = (int) s3fs_get_object(BUCK, path, testByte, 0, 1);
+	free(*testByte);
 	free(testByte); //Don't need it
 	if(result == -1){
 		return -EIO;
@@ -261,19 +341,23 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
     fprintf(stderr, "fs_readdir(path=\"%s\", buf=%p, offset=%d)\n",
 	        path, buf, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
-	uint8_t **dirbuf;
-	ssize_t read = ssize_t s3fs_get_object(BUCK, path, dirbuf, 0, 0);
+
+	uint8_t **dirbuf = NULL;
+	ssize_t read = s3fs_get_object(BUCK, path, dirbuf, 0, 0);
 	if (read == -1){
 	    return -EIO;
 	}
 	int nument = (int)read / sizeof(s3dirent_t);
-	s3dirent_t** dirarray = (s3dirent_t**) dirbuf;
+	s3dirent_t* dirarray = (s3dirent_t*)(*dirbuf);
 	int i = 0;
 	for(; i < nument; i++){
 		if( filler(buf, dirarray[i].name, NULL, 0) != 0) {
 			return -ENOMEM;
 		}
 	}
+	free(dirarray);
+	free(dirbuf);
+	return nument;
 }
 
 /*
@@ -283,7 +367,7 @@ int fs_releasedir(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_releasedir(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
 	
-    return -EIO;
+    return 0;
 }
 
 /*
@@ -307,7 +391,7 @@ void *fs_init(struct fuse_conn_info *conn)
 	if(0!=s3fs_clear_bucket((const char*) &(ctx->s3bucket))){
 		return NULL;
 	}
-	s3dirent_t* root = dir_init();
+	s3dirent_t* root = dir_init(NULL);
 
 	if(sizeof(s3dirent_t) == s3fs_put_object((const char*)&(ctx)->s3bucket, (const char*)"/", (const uint8_t*)root, sizeof(s3dirent_t))){
 		fprintf(stderr, "fs_init --- file sysetem initalized.\n");
@@ -319,13 +403,18 @@ void *fs_init(struct fuse_conn_info *conn)
 
 //Helper function for initializing any kind of directory entry
 //Note: we'll want this to do initial time stamp eventually
-s3dirent_t* dir_init(){
+s3dirent_t* dir_init(char* dirname){
 	s3dirent_t* newentry = malloc(sizeof(s3dirent_t));
-	strcpy(newentry->name,(const char*)".");
 	newentry->type = 'd';
+	if(dirname !=NULL){
+		strcpy(newentry->name,(const char*)dirname);
+		return newentry;
+	}
+	strcpy(newentry->name,(const char*)".");
 	newentry-> mode = (S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
 	//Initial timestamp for "."
 	newentry->createTime = *tmStamp();
+	newentry->size = sizeof(s3dirent_t);
 	return newentry;
 }
 

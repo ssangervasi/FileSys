@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <stdint.h>   // for uint32_t, etc.
 #include <sys/time.h> // for struct timeval
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,16 +42,17 @@ typedef struct{
 	unsigned char type; //'f' or 'd' or unused?
 	char name[256];
 	//metadata
-	int size; // number of bytes
+	long unsigned int size; // number of bytes
 	//going to need time stamps and stuff
 	struct tm createTime;
+	struct tm modTime;
 	mode_t mode;
 	
 	
 } s3dirent_t;
 
 s3dirent_t* entry_init(const char* name, const char type);
-s3dirent_t* dir_init();
+s3dirent_t* dir_init(char* dirname);
 s3dirent_t* file_init(const char* name, const char type);
 struct tm* tmStamp();
 
