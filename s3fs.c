@@ -41,20 +41,37 @@ int fs_opendir(const char *path, struct fuse_file_info *fi);
 int fs_getattr(const char *path, struct stat *statbuf) {
     fprintf(stderr, "fs_getattr(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
-	if(stat == NULL){ stat = malloc(sizeof(struct stat);}
-	
+
 	uint8_t** dirbuf = NULL;
-	ssize_t read = s3fs_get_object(BUCK, (const char*)dirname((char*)path), dirbuf, 0, sizeof(s3dirent_t));
+	ssize_t read = s3fs_get_object(BUCK, (const char*)dirname((char*)path), dirbuf, 0,0);
 	if (read < 0 || dirbuf == NULL){
 	    return -ENOENT;
 	}
 	int nument = (int)read / sizeof(s3dirent_t);
 	s3dirent_t* dirarray = (s3dirent_t*)(*dirbuf);
 	//loop to look for basename()
-	stat->st_mode = dirarray[0]->mode;
-	stat->st_size = (off_t)dirarray[0]->size;
-	stat->st_ctime = mktime(&(dirarray[0]->createTime));
-	stat->st_mtime = mktime(&(dirarray[0]->modTime));
+	int entdex =0;
+	for(; entdex < nument; entdex++){
+		if(strcmp((const char*)dirarray[entdex].name, (const char*)basename((char*) path)) == 0){
+			break;
+		}
+	}
+	if(dirarray[entdex].type == 'd'){ //If we're statting a dir, we need to navigate to its '.' instead.
+		free(dirarray);
+		free(dirbuf);
+		read = s3fs_get_object(BUCK, path, dirbuf, 0, sizeof(s3dirent_t));
+		if (read < 0 || dirbuf == NULL){
+	   		return -ENOENT;
+		}
+		dirarray = (s3dirent_t*)(*dirbuf);
+		entdex = 0;
+	}
+	if(statbuf == NULL){ statbuf = malloc(sizeof(struct stat));}
+	
+	statbuf->st_mode = dirarray[entdex].mode;
+	statbuf->st_size = (off_t)dirarray[entdex].size;
+	statbuf->st_ctime = mktime(&(dirarray[entdex].createTime));
+	statbuf->st_mtime = mktime(&(dirarray[entdex].modTime));
 	free(dirarray);
 	free(dirbuf);
 	return 0;
@@ -139,7 +156,7 @@ int fs_rmdir(const char *path) {
 	    return -EIO;
 	}
 
-	if( read > sizeof(s3dirent_t){	
+	if( read > sizeof(s3dirent_t)){	
 		return -1;
 	}
 	s3fs_remove_object(BUCK, path);
@@ -155,7 +172,7 @@ int fs_rmdir(const char *path) {
 	int i = 0;
 	int j = 0;
 	for(; i <= read/sizeof(s3dirent_t) ; i++){
-		if(strcmp((const char*)dirarray[i]->name, (const char*) basename((char*) path)) != 0){
+		if(strcmp((const char*)dirarray[i].name, (const char*) basename((char*) path)) != 0){
 			memcpy((void*) (newarray+j), (const void*) (dirarray + i), sizeof(s3dirent_t));
 			j++;
 		}
@@ -317,19 +334,27 @@ int fs_opendir(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_opendir(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
 	
-	uint8_t **testByte = NULL; 
-	/*	We don't care about getting the whole thing, we just want to know it's there
-	  	so we ask it to give us back at most 1 byte from the object.
-		Note that we now have BUCK representing a handy macro in s3fs.h
-	*/
-	int result = (int) s3fs_get_object(BUCK, path, testByte, 0, 1);
-	free(*testByte);
-	free(testByte); //Don't need it
-	if(result == -1){
-		return -EIO;
+	uint8_t** dirbuf = NULL;
+	ssize_t read = s3fs_get_object(BUCK, (const char*)dirname((char*)path), dirbuf, 0,0);
+	if (read < 0 || dirbuf == NULL){
+	    return -ENOENT;
 	}
-	//At this point result will be 0 if it was an empty object, or 1 if it had at least one byte.
-	return result;
+	int nument = (int)read / sizeof(s3dirent_t);
+	s3dirent_t* dirarray = (s3dirent_t*)(*dirbuf);
+	//loop to look for basename()
+	int entdex =0;
+	for(; entdex < nument; entdex++){
+		if(strcmp((const char*)dirarray[entdex].name, (const char*)basename((char*) path)) == 0){
+			break;
+		}
+	}
+	if(dirarray[entdex].type == 'd'){ 
+		return 0;
+	}
+	free(dirarray);
+	free(dirbuf);
+	return -ENOTDIR;
+
 }
 
 /*
@@ -347,9 +372,9 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 	if (read == -1){
 	    return -EIO;
 	}
-	int nument = (int)read / sizeof(s3dirent_t);
+	unsigned int nument = (int)read / sizeof(s3dirent_t);
 	s3dirent_t* dirarray = (s3dirent_t*)(*dirbuf);
-	int i = 0;
+	unsigned int i = offset/sizeof(s3dirent_t);
 	for(; i < nument; i++){
 		if( filler(buf, dirarray[i].name, NULL, 0) != 0) {
 			return -ENOMEM;
@@ -357,7 +382,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 	}
 	free(dirarray);
 	free(dirbuf);
-	return nument;
+	return 0;
 }
 
 /*

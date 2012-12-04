@@ -21,7 +21,7 @@
 #define S3ACCESSKEY "S3_ACCESS_KEY_ID"
 #define S3SECRETKEY "S3_SECRET_ACCESS_KEY"
 #define S3BUCKET "S3_BUCKET"
-
+#define sebastian "NERDY"
 #define BUFFERSIZE 1024
 
 #define BUCK (const char*)&(ctx)->s3bucket
