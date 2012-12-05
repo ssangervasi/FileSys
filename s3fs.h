@@ -24,7 +24,11 @@
 #define sebastian "NERDY"
 #define BUFFERSIZE 1024
 
-#define BUCK (const char*)&(ctx)->s3bucket
+#define BNAME char* bname=strdup((const char*)path);basename(bname);
+#define DNAME char* dname=strdup((const char*)path);dirname(dname);
+
+
+#define BUCK (const char*)(ctx->s3bucket)
 // store filesystem state information in this struct
 typedef struct {
     char s3bucket[BUFFERSIZE];

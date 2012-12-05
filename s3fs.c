@@ -19,14 +19,14 @@
 #include <sys/xattr.h>
 
 #define GET_PRIVATE_DATA ((s3context_t *) fuse_get_context()->private_data)
-
+#define _GNU_SOURCE
 /*
- * For each function below, if you need to return an error,
+ * For each function below, if you need to printf("\n"); return an error,
  * read the appropriate man page for the call and see what
  * error codes make sense for the type of failure you want
  * to convey.  For example, many of the calls below return
  * -EIO (an I/O error), since there are no S3 calls yet
- * implemented.  (Note that you need to return the negative
+ * implemented.  (Note that you need to printf("\n"); return the negative
  * value for an error code.)
  */
 int fs_opendir(const char *path, struct fuse_file_info *fi);
@@ -41,40 +41,53 @@ int fs_opendir(const char *path, struct fuse_file_info *fi);
 int fs_getattr(const char *path, struct stat *statbuf) {
     fprintf(stderr, "fs_getattr(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
-
-	uint8_t** dirbuf = NULL;
-	ssize_t read = s3fs_get_object(BUCK, (const char*)dirname((char*)path), dirbuf, 0,0);
-	if (read < 0 || dirbuf == NULL){
-	    return -ENOENT;
+	
+	
+	DNAME; //creates (mallocs) a const char* called dname
+	uint8_t* dirbuf;
+	fprintf(stderr, "begin alright__ dname: %s\n", dname);
+	ssize_t read = s3fs_get_object(BUCK, (const char*)dname, &dirbuf, 0,0);
+	  
+	if (read <= 0 || dirbuf == NULL){
+		fprintf(stderr, "not alright\n");
+	    printf("\n"); return -ENOENT;
 	}
+	fprintf(stderr, "alright\n");
 	int nument = (int)read / sizeof(s3dirent_t);
-	s3dirent_t* dirarray = (s3dirent_t*)(*dirbuf);
+	s3dirent_t* dirarray = (s3dirent_t*)dirbuf;
 	//loop to look for basename()
 	int entdex =0;
 	for(; entdex < nument; entdex++){
-		if(strcmp((const char*)dirarray[entdex].name, (const char*)basename((char*) path)) == 0){
+		BNAME; //similar to DNAME
+		if(strcmp((const char*)dirarray[entdex].name, (const char*)bname) == 0){
 			break;
-		}
+		} 
 	}
-	if(dirarray[entdex].type == 'd'){ //If we're statting a dir, we need to navigate to its '.' instead.
-		free(dirarray);
-		free(dirbuf);
-		read = s3fs_get_object(BUCK, path, dirbuf, 0, sizeof(s3dirent_t));
-		if (read < 0 || dirbuf == NULL){
-	   		return -ENOENT;
-		}
-		dirarray = (s3dirent_t*)(*dirbuf);
+	if(entdex == nument && nument>1){
+		printf("\n"); return -ENOENT;
+	} else if(nument == 1){
 		entdex = 0;
 	}
+	fprintf(stderr, "still alright\n");
+	if(dirarray[entdex].type == 'd'){ //If we're statting a dir, we need to navigate to its '.' instead.		
+		free(dirbuf);
+		read = s3fs_get_object(BUCK, path, &dirbuf, 0, sizeof(s3dirent_t));
+		if (read < 0 || dirbuf == NULL){
+	   		printf("\n"); return -ENOENT;
+		}
+		dirarray = (s3dirent_t*)dirbuf;
+		entdex = 0;
+	}
+	fprintf(stderr, "still 2 alright\n");
 	if(statbuf == NULL){ statbuf = malloc(sizeof(struct stat));}
 	
 	statbuf->st_mode = dirarray[entdex].mode;
 	statbuf->st_size = (off_t)dirarray[entdex].size;
 	statbuf->st_ctime = mktime(&(dirarray[entdex].createTime));
 	statbuf->st_mtime = mktime(&(dirarray[entdex].modTime));
-	free(dirarray);
+	
 	free(dirbuf);
-	return 0;
+	printf("\n"); return 0;
 }
 
 
@@ -88,7 +101,7 @@ int fs_getattr(const char *path, struct stat *statbuf) {
 int fs_mknod(const char *path, mode_t mode, dev_t dev) {
     fprintf(stderr, "fs_mknod(path=\"%s\", mode=0%3o)\n", path, mode);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /* 
@@ -100,38 +113,41 @@ int fs_mknod(const char *path, mode_t mode, dev_t dev) {
  * use mode|S_IFDIR.
  */
 int fs_mkdir(const char *path, mode_t mode) {
-    fprintf(stderr, "fs_mkdir(path=\"%s\", mode=0%3o)\n", path, mode);
+    fprintf(stderr, "->fs_mkdir(path=\"%s\", mode=0%3o)\n", path, mode);
     s3context_t *ctx = GET_PRIVATE_DATA;
     mode |= S_IFDIR;
 	
-	uint8_t** dirbuf = NULL;
-	ssize_t read = s3fs_get_object(BUCK, (const char*)dirname((char*)path), dirbuf, 0, 0);
+	uint8_t* dirbuf;
+	DNAME;
+	ssize_t read = s3fs_get_object(BUCK,(const char*)dname, &dirbuf, 0, 0);
+	
 	if (read < 0 || dirbuf == NULL){
-	    return -ENOENT;
+	    printf("\n"); return -ENOENT;
 	}
 	int nument = (int)read / sizeof(s3dirent_t);
-	s3dirent_t* dirarray = (s3dirent_t*)(*dirbuf);
+	s3dirent_t* dirarray = (s3dirent_t*)dirbuf;
 	s3dirent_t* newdirarray = malloc(read + sizeof(s3dirent_t));
-	
-	s3dirent_t* newdir = dir_init((char*)basename((char*)path));
+	BNAME;
+	s3dirent_t* newdir = dir_init(bname);
 
 	memcpy((void*)newdirarray, (const void*)dirarray, read);
-	memcpy((void*)(newdirarray+nument), (const void*)newdir, sizeof(s3dirent_t));
+	memcpy((void*)&newdirarray[nument], (const void*)newdir, sizeof(s3dirent_t));
 	newdirarray[0].size += sizeof(s3dirent_t);	
-	if(read + sizeof(s3dirent_t) == s3fs_put_object(BUCK, (const char*)dirname((char*)path), (const uint8_t*)newdirarray,read + sizeof(s3dirent_t))){
-		fprintf(stderr, "new dir put in parent.\n");
+	if((read + sizeof(s3dirent_t)) == s3fs_put_object(BUCK,(const char*)dname, (const uint8_t*)newdirarray,read + sizeof(s3dirent_t))){
+		fprintf(stderr, "directory entry put in parent. key of parent: _%s_\n", dname);
 	}	
-	free(dirarray);
+	
 	free(newdirarray);
 	free(newdir);
 	free(dirbuf);
 	newdir = dir_init(NULL);
 	newdir -> mode = mode;
-	if(sizeof(s3dirent_t) == s3fs_put_object(BUCK,path, (const uint8_t*)newdirarray,sizeof(s3dirent_t))){
-		fprintf(stderr, "new dir put in parent.\n");
+	if(sizeof(s3dirent_t) == s3fs_put_object(BUCK,path, (const uint8_t*)newdir,sizeof(s3dirent_t))){
+		fprintf(stderr, "new entry put onto file system. key: _%s_\n", path);
 	}
+
 	free(newdir);
-    return 0;
+    printf("\n"); return 0;
 }
 
 /*
@@ -140,7 +156,7 @@ int fs_mkdir(const char *path, mode_t mode) {
 int fs_unlink(const char *path) {
     fprintf(stderr, "fs_unlink(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /*
@@ -150,42 +166,44 @@ int fs_rmdir(const char *path) {
     fprintf(stderr, "fs_rmdir(path=\"%s\")\n", path);
 	s3context_t *ctx = GET_PRIVATE_DATA;
 
-	uint8_t **dirbuf = NULL;
-	ssize_t read = s3fs_get_object(BUCK, path, dirbuf, 0, 0);
+	uint8_t* dirbuf;
+	ssize_t read = s3fs_get_object(BUCK, path, &dirbuf, 0, 0);
 	if (read == -1){
-	    return -EIO;
+	    printf("\n"); return -EIO;
 	}
 
 	if( read > sizeof(s3dirent_t)){	
-		return -1;
+		printf("\n"); return -1;
 	}
 	s3fs_remove_object(BUCK, path);
 	free(dirbuf);
-	read = s3fs_get_object(BUCK, (const char*)dirname((char*) path), dirbuf, 0,0);
+	DNAME;
+	read = s3fs_get_object(BUCK, (const char*)dname, &dirbuf, 0,0);
 	if (read == -1){
-	    return -EIO;
+	    printf("\n"); return -EIO;
 	}
 
-	s3dirent_t* dirarray = (s3dirent_t*) *dirbuf;
-	s3dirent_t* newarray = malloc(sizeof(read) - sizeof(s3dirent_t));
+	s3dirent_t* dirarray = (s3dirent_t*) dirbuf;
+	s3dirent_t* newarray = malloc(read - sizeof(s3dirent_t));
 	
 	int i = 0;
 	int j = 0;
+	BNAME;
 	for(; i <= read/sizeof(s3dirent_t) ; i++){
-		if(strcmp((const char*)dirarray[i].name, (const char*) basename((char*) path)) != 0){
+		if(strcmp((const char*)dirarray[i].name, (const char*)bname) != 0){
 			memcpy((void*) (newarray+j), (const void*) (dirarray + i), sizeof(s3dirent_t));
 			j++;
 		}
 	}
 	newarray[0].size -= sizeof(s3dirent_t);
-	if(read-sizeof(s3dirent_t) == s3fs_put_object(BUCK,(const char*)dirname((char*) path), (const uint8_t*)newarray,read-sizeof(s3dirent_t))){
+	if(read-sizeof(s3dirent_t) == s3fs_put_object(BUCK,(const char*)dname, (const uint8_t*)newarray,read-sizeof(s3dirent_t))){
 		fprintf(stderr, "parent dir updated.\n");
 	}	
-	
-	free(dirarray);
+	  
+	  
 	free(newarray);
 	free(dirbuf);
-    return 0;
+    printf("\n"); return 0;
 }
 
 /*
@@ -194,7 +212,7 @@ int fs_rmdir(const char *path) {
 int fs_rename(const char *path, const char *newpath) {
     fprintf(stderr, "fs_rename(fpath=\"%s\", newpath=\"%s\")\n", path, newpath);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /*
@@ -203,7 +221,7 @@ int fs_rename(const char *path, const char *newpath) {
 int fs_chmod(const char *path, mode_t mode) {
     fprintf(stderr, "fs_chmod(fpath=\"%s\", mode=0%03o)\n", path, mode);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /*
@@ -212,7 +230,7 @@ int fs_chmod(const char *path, mode_t mode) {
 int fs_chown(const char *path, uid_t uid, gid_t gid) {
     fprintf(stderr, "fs_chown(path=\"%s\", uid=%d, gid=%d)\n", path, uid, gid);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /*
@@ -221,7 +239,7 @@ int fs_chown(const char *path, uid_t uid, gid_t gid) {
 int fs_truncate(const char *path, off_t newsize) {
     fprintf(stderr, "fs_truncate(path=\"%s\", newsize=%d)\n", path, (int)newsize);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /*
@@ -230,7 +248,7 @@ int fs_truncate(const char *path, off_t newsize) {
 int fs_utime(const char *path, struct utimbuf *ubuf) {
     fprintf(stderr, "fs_utime(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 
@@ -240,7 +258,7 @@ int fs_utime(const char *path, struct utimbuf *ubuf) {
  * will be passed to open().  Open should check if the operation
  * is permitted for the given flags.  
  * 
- * Optionally open may also return an arbitrary filehandle in the 
+ * Optionally open may also printf("\n"); return an arbitrary filehandle in the 
  * fuse_file_info structure (fi->fh).
  * which will be passed to all file operations.
  * (In stages 1 and 2, you are advised to keep this function very,
@@ -249,14 +267,14 @@ int fs_utime(const char *path, struct utimbuf *ubuf) {
 int fs_open(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_open(path\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 
 /* 
  * Read data from an open file
  *
- * Read should return exactly the number of bytes requested except
+ * Read should printf("\n"); return exactly the number of bytes requested except
  * on EOF or error, otherwise the rest of the data will be
  * substituted with zeroes.  
  */
@@ -264,20 +282,20 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
     fprintf(stderr, "fs_read(path=\"%s\", buf=%p, size=%d, offset=%d)\n",
 	        path, buf, (int)size, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /*
  * Write data to an open file
  *
- * Write should return exactly the number of bytes requested
+ * Write should printf("\n"); return exactly the number of bytes requested
  * except on error.
  */
 int fs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_write(path=\"%s\", buf=%p, size=%d, offset=%d)\n",
 	        path, buf, (int)size, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 
@@ -285,15 +303,15 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
  * Possibly flush cached data for one file.
  *
  * Flush is called on each close() of a file descriptor.  So if a
- * filesystem wants to return write errors in close() and the file
+ * filesystem wants to printf("\n"); return write errors in close() and the file
  * has cached dirty data, this is a good place to write back data
- * and return any errors.  Since many applications ignore close()
+ * and printf("\n"); return any errors.  Since many applications ignore close()
  * errors this is not always useful.
  */
 int fs_flush(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_flush(path=\"%s\", fi=%p)\n", path, fi);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /*
@@ -307,12 +325,12 @@ int fs_flush(const char *path, struct fuse_file_info *fi) {
  * with the same flags and file descriptor.  It is possible to
  * have a file opened more than once, in which case only the last
  * release will mean, that no more reads/writes will happen on the
- * file.  The return value of release is ignored.
+ * file.  The printf("\n"); return value of release is ignored.
  */
 int fs_release(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_release(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /*
@@ -321,7 +339,7 @@ int fs_release(const char *path, struct fuse_file_info *fi) {
  */
 int fs_fsync(const char *path, int datasync, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_fsync(path=\"%s\")\n", path);
-	return 0;
+	printf("\n"); return 0;
 }
 
 /*
@@ -334,27 +352,36 @@ int fs_opendir(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_opendir(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
 	
-	uint8_t** dirbuf = NULL;
-	ssize_t read = s3fs_get_object(BUCK, (const char*)dirname((char*)path), dirbuf, 0,0);
+	uint8_t* dirbuf;
+	DNAME;
+	ssize_t read = s3fs_get_object(BUCK, (const char*)dname, &dirbuf, 0,0);
 	if (read < 0 || dirbuf == NULL){
-	    return -ENOENT;
+	    printf("\n"); return -ENOENT;
 	}
 	int nument = (int)read / sizeof(s3dirent_t);
-	s3dirent_t* dirarray = (s3dirent_t*)(*dirbuf);
+	if(nument == 1){ //This will only happen for the root dir, "/"
+		fprintf(stderr, "__Good Is Dir\n\n");
+		printf("\n"); return 0;
+	}
+	s3dirent_t* dirarray = (s3dirent_t*)dirbuf;
 	//loop to look for basename()
 	int entdex =0;
+	BNAME;
 	for(; entdex < nument; entdex++){
-		if(strcmp((const char*)dirarray[entdex].name, (const char*)basename((char*) path)) == 0){
+		if(strcmp((const char*)dirarray[entdex].name, (const char*)bname) == 0){
 			break;
 		}
 	}
-	if(dirarray[entdex].type == 'd'){ 
-		return 0;
+	if(dirarray[entdex].type == 'd'){		
+		fprintf(stderr, "__Good Is Dir\n\n");
+		printf("\n"); return 0;
 	}
-	free(dirarray);
+	  
+	  
 	free(dirbuf);
-	return -ENOTDIR;
-
+	fprintf(stderr, "__Not Dir Error__ path: _%s_\n", path);
+	printf("\n"); return -ENOTDIR;
+ 
 }
 
 /*
@@ -367,22 +394,21 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 	        path, buf, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
 
-	uint8_t **dirbuf = NULL;
-	ssize_t read = s3fs_get_object(BUCK, path, dirbuf, 0, 0);
+	uint8_t* dirbuf;
+	ssize_t read = s3fs_get_object(BUCK, path, &dirbuf, 0, 0);
 	if (read == -1){
-	    return -EIO;
+	    printf("\n"); return -EIO;
 	}
 	unsigned int nument = (int)read / sizeof(s3dirent_t);
-	s3dirent_t* dirarray = (s3dirent_t*)(*dirbuf);
+	s3dirent_t* dirarray = (s3dirent_t*)dirbuf;
 	unsigned int i = offset/sizeof(s3dirent_t);
 	for(; i < nument; i++){
 		if( filler(buf, dirarray[i].name, NULL, 0) != 0) {
-			return -ENOMEM;
+			printf("\n"); return -ENOMEM;
 		}
 	}
-	free(dirarray);
 	free(dirbuf);
-	return 0;
+	printf("\n"); return 0;
 }
 
 /*
@@ -392,7 +418,7 @@ int fs_releasedir(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_releasedir(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
 	
-    return 0;
+    printf("\n"); return 0;
 }
 
 /*
@@ -402,7 +428,7 @@ int fs_releasedir(const char *path, struct fuse_file_info *fi) {
 int fs_fsyncdir(const char *path, int datasync, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_fsyncdir(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /*
@@ -413,17 +439,17 @@ void *fs_init(struct fuse_conn_info *conn)
 {
     fprintf(stderr, "fs_init --- initializing file system.\n");
     s3context_t *ctx = GET_PRIVATE_DATA;
-	if(0!=s3fs_clear_bucket((const char*) &(ctx->s3bucket))){
-		return NULL;
+	if(0!=s3fs_clear_bucket(BUCK)){
+		printf("\n"); return NULL;
 	}
 	s3dirent_t* root = dir_init(NULL);
 
-	if(sizeof(s3dirent_t) == s3fs_put_object((const char*)&(ctx)->s3bucket, (const char*)"/", (const uint8_t*)root, sizeof(s3dirent_t))){
+	if(sizeof(s3dirent_t) == s3fs_put_object(BUCK, (const char*)"/", (const uint8_t*)root, sizeof(s3dirent_t))){
 		fprintf(stderr, "fs_init --- file sysetem initalized.\n");
 	}else{
-		return NULL;
+		printf("\n"); return NULL;
 	}
-    return ctx;
+    printf("\n"); return ctx;
 }
 
 //Helper function for initializing any kind of directory entry
@@ -433,14 +459,14 @@ s3dirent_t* dir_init(char* dirname){
 	newentry->type = 'd';
 	if(dirname !=NULL){
 		strcpy(newentry->name,(const char*)dirname);
-		return newentry;
+		printf("\n"); return newentry;
 	}
 	strcpy(newentry->name,(const char*)".");
 	newentry-> mode = (S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
 	//Initial timestamp for "."
 	newentry->createTime = *tmStamp();
 	newentry->size = sizeof(s3dirent_t);
-	return newentry;
+	printf("\n"); return newentry;
 }
 
 s3dirent_t* file_init(const char* name, const char type){
@@ -452,7 +478,7 @@ s3dirent_t* file_init(const char* name, const char type){
 	strcpy(newentry->name,(const char*) realname);
 	newentry->type = 'f';
 	newentry->createTime = *tmStamp();
-	return newentry;
+	printf("\n"); return newentry;
 }
 //Actual helper function for getting a time thing
 struct tm* tmStamp(){
@@ -460,7 +486,7 @@ struct tm* tmStamp(){
 	struct tm actual;
 	time(&start);
 	actual = *localtime(&start);
-	return &actual;
+	printf("\n"); return &actual;
 }
 //Helper function just for gettin the current time:
 //This is a char* so we don't use it...
@@ -472,7 +498,7 @@ char* timestamp(){
 	time(&start);
 	actual = *localtime(&start);
 	strftime(hold, sizeof(hold), "%a %Y-%m-%d %H:%M:%S %Z", &actual);
-	return hold;
+	printf("\n"); return hold;
 }
 */
 
@@ -487,13 +513,13 @@ void fs_destroy(void *userdata) {
 }
 
 /*
- * Check file access permissions.  For now, just return 0 (success!)
+ * Check file access permissions.  For now, just printf("\n"); return 0 (success!)
  * Later, actually check permissions (don't bother initially).
  */
 int fs_access(const char *path, int mask) {
     fprintf(stderr, "fs_access(path=\"%s\", mask=0%o)\n", path, mask);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return 0;
+    printf("\n"); return 0;
 }
 
 /*
@@ -504,7 +530,7 @@ int fs_access(const char *path, int mask) {
 int fs_ftruncate(const char *path, off_t offset, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_ftruncate(path=\"%s\", offset=%d)\n", path, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    return -EIO;
+    printf("\n"); return -EIO;
 }
 
 /*
@@ -562,7 +588,7 @@ int main(int argc, char *argv[]) {
     // don't allow anything to continue if we're running as root.  bad stuff.
     if ((getuid() == 0) || (geteuid() == 0)) {
     	fprintf(stderr, "Don't run this as root.\n");
-    	return -1;
+    	printf("\n"); return -1;
     }
     s3context_t *stateinfo = malloc(sizeof(s3context_t));
     memset(stateinfo, 0, sizeof(s3context_t));
@@ -591,5 +617,5 @@ int main(int argc, char *argv[]) {
     int fuse_stat = fuse_main(argc, argv, &s3fs_ops, stateinfo);
     fprintf(stderr, "Startup function (fuse_main) returned %d\n", fuse_stat);
     
-    return fuse_stat;
+    printf("\n"); return fuse_stat;
 }

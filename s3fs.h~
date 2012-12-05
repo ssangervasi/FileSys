@@ -21,10 +21,14 @@
 #define S3ACCESSKEY "S3_ACCESS_KEY_ID"
 #define S3SECRETKEY "S3_SECRET_ACCESS_KEY"
 #define S3BUCKET "S3_BUCKET"
-
+#define sebastian "NERDY"
 #define BUFFERSIZE 1024
 
-#define BUCK (const char*)&(ctx)->s3bucket
+#define BNAME char* bname=strdup((const char*)path);basename(bname);
+#define DNAME char* dname=strdup((const char*)path);dirname(dname);
+
+
+#define BUCK (const char*)(ctx->s3bucket)
 // store filesystem state information in this struct
 typedef struct {
     char s3bucket[BUFFERSIZE];
