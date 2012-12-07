@@ -24,9 +24,9 @@
 #define sebastian "NERDY"
 #define BUFFERSIZE 1024
 
-#define BNAME char* bname=strdup((const char*)path);bname=basename(bname);
+#define BNAME char* btemp=strdup((const char*)path);char*bname=basename(btemp);
 
-#define DNAME char* dname=strdup((const char*)path);dname=dirname(dname);
+#define DNAME char* dtemp=strdup((const char*)path);char*dname=dirname(dtemp);
 
 
 #define BUCK (const char*)(ctx->s3bucket)
