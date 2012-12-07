@@ -131,7 +131,7 @@ int fs_mkdir(const char *path, mode_t mode) {
 	s3dirent_t* newdir = dir_init(bname);
 
 	memcpy((void*)newdirarray, (const void*)dirarray, read);
-	memcpy((void*)&newdirarray[nument], (const void*)newdir, sizeof(s3dirent_t));
+	memcpy((void*)(newdirarray) + read/sizeof(void), (const void*)newdir, sizeof(s3dirent_t));
 	newdirarray[0].size += sizeof(s3dirent_t);	
 	if((read + sizeof(s3dirent_t)) == s3fs_put_object(BUCK,(const char*)dname, (const uint8_t*)newdirarray,read + sizeof(s3dirent_t))){
 		fprintf(stderr, "directory entry put in parent. key of parent: _%s_\n", dname);
@@ -352,16 +352,21 @@ int fs_opendir(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_opendir(path=\"%s\")\n", path);
     s3context_t *ctx = GET_PRIVATE_DATA;
 	
+	if(strcmp(path, (const char*)"/") == 0){
+		return 0;
+	}
 	uint8_t* dirbuf;
 	DNAME;
 	ssize_t read = s3fs_get_object(BUCK, (const char*)dname, &dirbuf, 0,0);
 	if (read < 0 || dirbuf == NULL){
-	    printf("\n"); return -ENOENT;
+	    printf("read< or dirbuf == null\n"); 
+		return -ENOENT;
 	}
-	int nument = (int)read / sizeof(s3dirent_t);
+	int nument = read/sizeof(s3dirent_t);
 	if(nument == 1){ //This will only happen for the root dir, "/"
 		fprintf(stderr, "__Good Is Dir\n\n");
-		printf("\n"); return 0;
+		printf("\n"); 
+		return 0;
 	}
 	s3dirent_t* dirarray = (s3dirent_t*)dirbuf;
 	//loop to look for basename()
@@ -380,7 +385,8 @@ int fs_opendir(const char *path, struct fuse_file_info *fi) {
 	  
 	free(dirbuf);
 	fprintf(stderr, "__Not Dir Error__ path: _%s_\n", path);
-	printf("\n"); return -ENOTDIR;
+	printf("\n"); 
+	return -ENOTDIR;
  
 }
 
@@ -459,14 +465,16 @@ s3dirent_t* dir_init(char* dirname){
 	newentry->type = 'd';
 	if(dirname !=NULL){
 		strcpy(newentry->name,(const char*)dirname);
-		printf("\n"); return newentry;
+		printf("\n");
+		return newentry;
 	}
 	strcpy(newentry->name,(const char*)".");
 	newentry-> mode = (S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
 	//Initial timestamp for "."
 	newentry->createTime = *tmStamp();
 	newentry->size = sizeof(s3dirent_t);
-	printf("\n"); return newentry;
+	printf("\n"); 
+	return newentry;
 }
 
 s3dirent_t* file_init(const char* name, const char type){
