@@ -24,8 +24,9 @@
 #define sebastian "NERDY"
 #define BUFFERSIZE 1024
 
-#define BNAME char* bname=strdup((const char*)path);basename(bname);
-#define DNAME char* dname=strdup((const char*)path);dirname(dname);
+#define BNAME char* bname=strdup((const char*)path);bname=basename(bname);
+
+#define DNAME char* dname=strdup((const char*)path);dname=dirname(dname);
 
 
 #define BUCK (const char*)(ctx->s3bucket)
@@ -56,7 +57,7 @@ typedef struct{
 } s3dirent_t;
 
 s3dirent_t* entry_init(const char* name, const char type);
-s3dirent_t* dir_init(char* dirname);
+s3dirent_t* dir_init(const char* givename);
 s3dirent_t* file_init(const char* name, const char type);
 struct tm* tmStamp();
 
