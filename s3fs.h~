@@ -58,7 +58,7 @@ typedef struct{
 
 s3dirent_t* entry_init(const char* name, const char type);
 s3dirent_t* dir_init(const char* givename);
-s3dirent_t* file_init(const char* name, const char type);
+s3dirent_t* file_init(const char* name);
 struct tm* tmStamp();
 
 #endif // __USERSPACEFS_H__
