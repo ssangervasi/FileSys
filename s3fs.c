@@ -1,6 +1,12 @@
 /* This code is based on the fine code written by Joseph Pfeiffer for his
    fuse system tutorial. */
 
+/* The callback functions of this code were written by Sebastian Sangervasi
+	and Nicole VanMeter for Colgate University COSC 301 course.
+	Submission date: December 7, 2012 CE
+
+	
+*/
 #include "s3fs.h"
 #include "libs3_wrapper.h"
 
@@ -91,6 +97,12 @@ int fs_getattr(const char *path, struct stat *statbuf) {
 	
 	statbuf->st_mode = dirarray[entdex].mode;
 	statbuf->st_size = (off_t)dirarray[entdex].size;
+	statbuf->st_nlink = 0;
+	statbuf->st_uid = getuid();
+	statbuf->st_gid = getgid();
+	statbuf->st_blksize = 0;
+	statbuf->st_blocks =1+( dirarray[entdex].size/512);
+	statbuf->st_atime = mktime(&(dirarray[entdex].modTime));
 	statbuf->st_ctime = mktime(&(dirarray[entdex].createTime));
 	statbuf->st_mtime = mktime(&(dirarray[entdex].modTime));
 	
@@ -127,14 +139,16 @@ int fs_mknod(const char *path, mode_t mode, dev_t dev) {
 	s3dirent_t* newdirarray = malloc(read + sizeof(s3dirent_t));
 	BNAME;
 	s3dirent_t* newfile = file_init((const char*)bname);
+	newfile->mode = mode;
 	fprintf(stderr, "bname: _%s_\n", bname);
 	memcpy((void*)newdirarray, (const void*)dirarray, read);
 	memcpy((void*)(newdirarray) + read/sizeof(void), (const void*)newfile, sizeof(s3dirent_t));
-	newdirarray[0].size += sizeof(s3dirent_t);	
+	newdirarray[0].size += sizeof(s3dirent_t);
+	TMSTAMP;
+	newdirarray[0].modTime = actual;	
 	if((read + sizeof(s3dirent_t)) == s3fs_put_object(BUCK,(const char*)dname, (const uint8_t*)newdirarray,read + sizeof(s3dirent_t))){
 		fprintf(stderr, "directory entry put in parent. key of parent: _%s_\n", dname);
 	}
-	
 	free(newdirarray);
 	free(newfile);
 	free(dirbuf);
@@ -170,10 +184,12 @@ int fs_mkdir(const char *path, mode_t mode) {
 	fprintf(stderr, "bname: _%s_\n", bname);
 	memcpy((void*)newdirarray, (const void*)dirarray, read);
 	memcpy((void*)(newdirarray) + read/sizeof(void), (const void*)newdir, sizeof(s3dirent_t));
-	newdirarray[0].size += sizeof(s3dirent_t);	
+	newdirarray[0].size += sizeof(s3dirent_t);
+	TMSTAMP;
+	newdirarray[0].modTime = actual;	
 	if((read + sizeof(s3dirent_t)) == s3fs_put_object(BUCK,(const char*)dname, (const uint8_t*)newdirarray,read + sizeof(s3dirent_t))){
 		fprintf(stderr, "directory entry put in parent. key of parent: _%s_\n", dname);
-	}	
+	}
 	
 	free(newdirarray);
 	free(newdir);
@@ -185,8 +201,8 @@ int fs_mkdir(const char *path, mode_t mode) {
 	}
 	free(dtemp);
 	free(btemp);
-	free(newdir);
-    printf("\n"); return 0;
+	free(newdir); 
+	return 0;
 }
 
 /*
@@ -194,8 +210,8 @@ int fs_mkdir(const char *path, mode_t mode) {
  */
 int fs_unlink(const char *path) {
     fprintf(stderr, "fs_unlink(path=\"%s\")\n", path);
-    s3context_t *ctx = GET_PRIVATE_DATA;
-    printf("\n"); return -EIO;
+    //s3context_t *ctx = GET_PRIVATE_DATA;
+    return remove(path);
 }
 
 /*
@@ -203,12 +219,19 @@ int fs_unlink(const char *path) {
  */
 int fs_rmdir(const char *path) {
     fprintf(stderr, "fs_rmdir(path=\"%s\")\n", path);
+	return remove(path);	
+
+}
+
+//Magical removal:
+int remove(const char *path) {
 	s3context_t *ctx = GET_PRIVATE_DATA;
 
 	uint8_t* dirbuf;
 	ssize_t read = s3fs_get_object(BUCK, path, &dirbuf, 0, 0);
-	if (read == -1){
-	    printf("\n"); return -EIO;
+	if (read < 0){
+	    printf("\n"); 
+		return -EIO;
 	}
 
 	if( read > sizeof(s3dirent_t)){	
@@ -218,7 +241,7 @@ int fs_rmdir(const char *path) {
 	free(dirbuf);
 	DNAME;
 	read = s3fs_get_object(BUCK, (const char*)dname, &dirbuf, 0,0);
-	if (read == -1){
+	if (read < 0){
 		free(dtemp); 
 		return -EIO;
 	}
@@ -229,23 +252,28 @@ int fs_rmdir(const char *path) {
 	int i = 0;
 	int j = 0;
 	BNAME;
-	for(; i <= read/sizeof(s3dirent_t) ; i++){
+	for(; i < read/sizeof(s3dirent_t) ; i++){
 		if(strcmp((const char*)dirarray[i].name, (const char*)bname) != 0){
 			memcpy((void*) (newarray+j), (const void*) (dirarray + i), sizeof(s3dirent_t));
 			j++;
 		}
 	}
 	newarray[0].size -= sizeof(s3dirent_t);
+	TMSTAMP;
+	newarray[0].modTime =actual;
+		
 	if(read-sizeof(s3dirent_t) == s3fs_put_object(BUCK,(const char*)dname, (const uint8_t*)newarray,read-sizeof(s3dirent_t))){
 		fprintf(stderr, "parent dir updated.\n");
-	}	
+	}
 	  
 	free(dtemp);
 	free(btemp);
 	free(newarray);
 	free(dirbuf);
-    printf("\n"); return 0;
+    printf("\n"); 
+	return 0;
 }
+
 
 /*
  * Rename a file.
@@ -253,7 +281,51 @@ int fs_rmdir(const char *path) {
 int fs_rename(const char *path, const char *newpath) {
     fprintf(stderr, "fs_rename(fpath=\"%s\", newpath=\"%s\")\n", path, newpath);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    printf("\n"); return -EIO;
+		
+	if(strcmp(path, (const char*)"/") == 0){
+		return -EISDIR;
+	}
+
+	uint8_t* buf;
+	int read = s3fs_get_object(BUCK, path, &buf, 0,0);
+	if(read <0){
+		return -1;
+	}
+	
+	s3fs_put_object(BUCK, newpath, buf, read);
+	free(buf);
+
+	uint8_t* dirbuf;
+	DNAME;
+	read = s3fs_get_object(BUCK, (const char*)dname, &dirbuf, 0,0);
+	if (read < 0 || dirbuf == NULL){
+	    printf("read<0 or dirbuf == null\n");
+		free(dtemp);
+		free(dirbuf); 
+		return -ENOENT;
+	}
+	int nument = read/sizeof(s3dirent_t);
+	
+	s3dirent_t* dirarray = (s3dirent_t*)dirbuf;
+	//loop to look for basename()
+	int entdex =0;
+	BNAME;
+	for(; entdex < nument; entdex++){
+		if(strcmp((const char*)dirarray[entdex].name, (const char*)bname) == 0){
+			strcpy(dirarray[entdex].name, basename((char*)newpath));
+			TMSTAMP;
+			dirarray[entdex].modTime = actual;
+			break;
+		}
+	}
+	if(read == s3fs_put_object(BUCK,(const char*)dname, (const uint8_t*)dirarray,read)){
+		fprintf(stderr, "parent dir updated.\n");
+	}
+	free(dirbuf);
+	free(dtemp);
+	free(btemp);
+    printf("\n"); 
+	return 0;
 }
 
 /*
@@ -262,7 +334,8 @@ int fs_rename(const char *path, const char *newpath) {
 int fs_chmod(const char *path, mode_t mode) {
     fprintf(stderr, "fs_chmod(fpath=\"%s\", mode=0%03o)\n", path, mode);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    printf("\n"); return -EIO;
+    printf("\n"); 
+	return -EIO;
 }
 
 /*
@@ -280,7 +353,48 @@ int fs_chown(const char *path, uid_t uid, gid_t gid) {
 int fs_truncate(const char *path, off_t newsize) {
     fprintf(stderr, "fs_truncate(path=\"%s\", newsize=%d)\n", path, (int)newsize);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    printf("\n"); return -EIO;
+    
+	if(strcmp(path, (const char*)"/") == 0){
+		return -EISDIR;
+	}
+
+	uint8_t* dirbuf;
+	DNAME;
+	int read = s3fs_get_object(BUCK, (const char*)dname, &dirbuf, 0,0);
+	if (read < 0 || dirbuf == NULL){
+	    printf("read<0 or dirbuf == null\n");
+		free(dtemp);
+		free(dirbuf); 
+		return -ENOENT;
+	}
+	int nument = read/sizeof(s3dirent_t);
+	
+	s3dirent_t* dirarray = (s3dirent_t*)dirbuf;
+	//loop to look for basename()
+	int entdex =0;
+	BNAME;
+	for(; entdex < nument; entdex++){
+		if(strcmp((const char*)dirarray[entdex].name, (const char*)bname) == 0){
+			if(dirarray[entdex].type == 'd'){
+				free(dirbuf); free(dtemp); free(btemp);
+				return -EISDIR;
+			}
+			s3fs_remove_object(BUCK, path);
+			dirarray[entdex].size = 0;
+			TMSTAMP;
+			dirarray[entdex].modTime = actual;					
+			s3fs_put_object(BUCK, path, NULL, 0);			
+			break;
+		}
+	}
+	if(read == s3fs_put_object(BUCK,(const char*)dname, (const uint8_t*)dirarray,read)){
+		fprintf(stderr, "parent dir updated.\n");
+	}
+	free(dirbuf);
+	free(dtemp);
+	free(btemp);
+    printf("\n"); 
+	return 0;
 }
 
 /*
@@ -288,8 +402,8 @@ int fs_truncate(const char *path, off_t newsize) {
  */
 int fs_utime(const char *path, struct utimbuf *ubuf) {
     fprintf(stderr, "fs_utime(path=\"%s\")\n", path);
-    s3context_t *ctx = GET_PRIVATE_DATA;
-    printf("\n"); return -EIO;
+    //s3context_t *ctx = GET_PRIVATE_DATA;
+    return 0;
 }
 
 
@@ -366,7 +480,7 @@ int fs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
 	
 	uint8_t* dirbuf;
 	ssize_t read = s3fs_get_object(BUCK, path, &dirbuf, 0, 0);
-	if (read  <0 || dirbuf == NULL){ 
+	if (read  <0){ 
 		free(dirbuf);
 		return -EIO;
 	}
@@ -391,7 +505,57 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
     fprintf(stderr, "fs_write(path=\"%s\", buf=%p, size=%d, offset=%d)\n",
 	        path, buf, (int)size, (int)offset);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    printf("\n"); return -EIO;
+    
+	if(buf == NULL){
+		return 0;
+	}	
+	uint8_t* dirbuf;
+	ssize_t read = s3fs_get_object(BUCK, path, &dirbuf, 0, 0);
+	if (read  <0){ 
+		free(dirbuf);
+		return -EIO;
+	}
+	uint8_t* newbuf;
+	ssize_t newsize = read;
+	if(offset+size > read){
+		newbuf = malloc(offset+size);
+		memcpy(newbuf, (const void*)dirbuf, read);
+		newsize = offset + size;
+		free(dirbuf);
+	} else{ 
+		newbuf = dirbuf;
+	}
+	memcpy((newbuf+offset),(void*)buf, size);  
+	if(newsize != s3fs_put_object(BUCK, path, (const uint8_t*)newbuf, newsize)){
+		return -1;
+	}	
+	free(newbuf);
+
+	DNAME;
+	read = s3fs_get_object(BUCK, dname, &dirbuf, 0, 0);
+	int nument = read/sizeof(s3dirent_t);
+	s3dirent_t* dirarray = (s3dirent_t*) dirbuf;	
+	BNAME;
+	int entdex = 1;
+	for(; entdex < nument; entdex++){
+		if(strcmp((const char*)dirarray[entdex].name, (const char*)bname) == 0){
+			dirarray[entdex].size = newsize;
+			TMSTAMP;
+			dirarray[entdex].modTime = actual;
+			break;
+		}
+	}
+	if(read != s3fs_put_object(BUCK, dname, (const uint8_t*)dirbuf, read)){
+		free(btemp);
+		free(dtemp);
+		free(dirbuf);
+		return -1;
+	}
+	free(btemp);
+	free(dtemp);
+	free(dirbuf);
+    printf("\n"); 
+	return (int)size;
 }
 
 
@@ -406,8 +570,9 @@ int fs_write(const char *path, const char *buf, size_t size, off_t offset, struc
  */
 int fs_flush(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_flush(path=\"%s\", fi=%p)\n", path, fi);
-    s3context_t *ctx = GET_PRIVATE_DATA;
-    printf("\n"); return -EIO;
+    //s3context_t *ctx = GET_PRIVATE_DATA;
+    printf("\n");
+	 return 0;
 }
 
 /*
@@ -425,8 +590,9 @@ int fs_flush(const char *path, struct fuse_file_info *fi) {
  */
 int fs_release(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_release(path=\"%s\")\n", path);
-    s3context_t *ctx = GET_PRIVATE_DATA;
-    printf("\n"); return -EIO;
+    //s3context_t *ctx = GET_PRIVATE_DATA;
+    printf("\n"); 
+	return 0;
 }
 
 /*
@@ -502,7 +668,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
 
 	uint8_t* dirbuf;
 	ssize_t read = s3fs_get_object(BUCK, path, &dirbuf, 0, 0);
-	if (read  <0 || dirbuf == NULL){ 
+	if (read  <0){ 
 		free(dirbuf);
 		return -EIO;
 	}
@@ -527,7 +693,7 @@ int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
  */
 int fs_releasedir(const char *path, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_releasedir(path=\"%s\")\n", path);
-    s3context_t *ctx = GET_PRIVATE_DATA;
+    //s3context_t *ctx = GET_PRIVATE_DATA;
 	return 0;
 }
 
@@ -577,7 +743,9 @@ s3dirent_t* dir_init(const char* givename){
 	strcpy(newentry->name,(const char*)".");
 	newentry-> mode = (S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
 	//Initial timestamp for "."
-	newentry->createTime = *tmStamp();
+	TMSTAMP;
+	newentry->createTime = actual;
+	newentry->modTime = actual;
 	newentry->size = sizeof(s3dirent_t);
 	printf("\n"); 
 	return newentry;
@@ -591,19 +759,17 @@ s3dirent_t* file_init(const char* name){
 	}
 	strcpy(newentry->name,(const char*) realname);
 	newentry->type = 'f';
-	newentry->createTime = *tmStamp();
+	TMSTAMP;
+	newentry->createTime = actual;
+	newentry->modTime = actual;
 	newentry->size = 0;
-	printf("\n"); return newentry;
+	newentry->mode = (S_IFREG | S_IRUSR | S_IWUSR | S_IXUSR);
+	return newentry;
 }
-//Actual helper function for getting a time thing
-struct tm* tmStamp(){
-	time_t start;
-	struct tm actual;
-	time(&start);
-	actual = *localtime(&start);
-	printf("\n"); return &actual;
-}
+
 //Helper function just for gettin the current time:
+// Actually we just macro'd that sh$t. [Written by Sebastian Sangervasi]
+
 //This is a char* so we don't use it...
 /*
 char* timestamp(){
@@ -634,7 +800,61 @@ void fs_destroy(void *userdata) {
 int fs_access(const char *path, int mask) {
     fprintf(stderr, "fs_access(path=\"%s\", mask=0%o)\n", path, mask);
     s3context_t *ctx = GET_PRIVATE_DATA;
-    printf("\n"); return 0;
+	
+	DNAME; //creates (mallocs) a const char* called dtemp
+	uint8_t* dirbuf;
+	ssize_t read = s3fs_get_object(BUCK, (const char*)dname, &dirbuf, 0,0);
+	free(dtemp);
+	if (read <= 0 || dirbuf == NULL){
+		fprintf(stderr, "not alright\n");
+	    printf("\n");
+		free(dirbuf); 
+		return -ENOENT;
+	}
+
+	int nument = (int)read / sizeof(s3dirent_t);
+	s3dirent_t* dirarray = (s3dirent_t*)dirbuf;
+	//loop to look for basename()
+	int entdex =0;
+	if(strcmp(path, (const char*)"/") != 0){
+		BNAME; //similar to DNAME
+		for(; entdex < nument; entdex++){			
+			if(strcmp((const char*)dirarray[entdex].name, (const char*)bname) == 0){
+				break;
+			}			 
+		}
+		free(btemp);
+	}else{
+		free(dirbuf);
+		return 0;
+	}
+
+	
+	if(nument == entdex){ 
+		printf("entdex ==nument\n");
+		free(dirbuf);
+		return -ENOENT;
+	}
+
+	
+	if(dirarray[entdex].type == 'd'){ //If we're statting a dir, we need to navigate to its '.' instead.		
+			
+		free(dirbuf);
+		read = s3fs_get_object(BUCK, path, &dirbuf, 0, sizeof(s3dirent_t));
+		if (read < 0 || dirbuf == NULL){
+	   		printf("this case\n"); 
+			free(dirbuf);
+			return -ENOENT;
+		}
+		dirarray = (s3dirent_t*)dirbuf;
+		entdex = 0;
+	}
+
+	free(dirbuf);
+	if((dirarray[entdex].mode | mask) != dirarray[entdex].mode){
+		return -EACCES;
+	} 
+	return 0;
 }
 
 /*
@@ -644,8 +864,8 @@ int fs_access(const char *path, int mask) {
  */
 int fs_ftruncate(const char *path, off_t offset, struct fuse_file_info *fi) {
     fprintf(stderr, "fs_ftruncate(path=\"%s\", offset=%d)\n", path, (int)offset);
-    s3context_t *ctx = GET_PRIVATE_DATA;
-    printf("\n"); return -EIO;
+    //s3context_t *ctx = GET_PRIVATE_DATA;
+    return fs_truncate(path, 0);
 }
 
 /*

@@ -15,7 +15,14 @@
 /* This code is based on the fine code written by Joseph Pfeiffer for his
    fuse system tutorial. */
 
+/* The callback functions of this code were written by Sebastian Sangervasi
+	and Nicole VanMeter for Colgate University COSC 301 course.
+	Submission date: December 7, 2012 CE
+	Macros are cool.
+*/
+
 /* Declare to the FUSE API which version we're willing to speak */
+
 #define FUSE_USE_VERSION 26
 
 #define S3ACCESSKEY "S3_ACCESS_KEY_ID"
@@ -28,8 +35,10 @@
 
 #define DNAME char* dtemp=strdup((const char*)path);char*dname=dirname(dtemp);
 
-
 #define BUCK (const char*)(ctx->s3bucket)
+
+#define TMSTAMP time_t start; struct tm actual; time(&start); actual = *localtime(&start);
+
 // store filesystem state information in this struct
 typedef struct {
     char s3bucket[BUFFERSIZE];
@@ -56,6 +65,9 @@ typedef struct{
 	
 } s3dirent_t;
 
+//Helper functions:
+
+int remove(const char *path);
 s3dirent_t* entry_init(const char* name, const char type);
 s3dirent_t* dir_init(const char* givename);
 s3dirent_t* file_init(const char* name);
