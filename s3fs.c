@@ -4,7 +4,6 @@
 /* The callback functions of this code were written by Sebastian Sangervasi
 	and Nicole VanMeter for Colgate University COSC 301 course.
 	Submission date: December 7, 2012 CE
-
 	
 */
 #include "s3fs.h"
